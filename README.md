@@ -17,6 +17,63 @@ src/
     └── types.ts          # Voice-specific types
 ```
 
+### System Diagram
+
+```mermaid
+graph TD
+    subgraph Host["Host Application"]
+        APP["Your App / Next.js"]
+        VDB["Vector DB\n(MongoDB Atlas, Pinecone, etc.)"]
+        FAQ["FAQ Data Source"]
+        LLM_HOST["LLM Provider\n(OpenAI, Gemini, etc.)"]
+    end
+
+    subgraph Agent["@edurag/agent"]
+        IDX["index.ts\n(Barrel Exports)"]
+
+        subgraph TextAgent["Text Agent · Vercel AI SDK"]
+            RA["runAgent()"]
+            PROMPTS["prompts.ts\nAGENT_SYSTEM_PROMPT\nFAQ_SYNTHESIS_PROMPT"]
+            TOOLS["tools.ts"]
+            VS["createVectorSearchTool()"]
+            FQ["createPopularFaqsTool()"]
+        end
+
+        subgraph VoiceAgent["Voice Agent · Deepgram Converse"]
+            GSP["getSystemPrompt()"]
+            SMV["stripMarkdownForVoice()"]
+        end
+    end
+
+    subgraph Deepgram["Deepgram Pipeline"]
+        DG_STT["STT\n(Speech-to-Text)"]
+        LLM_EXT["LLM\n(via Converse API)"]
+        DG_TTS["Aura TTS\n(Text-to-Speech)"]
+    end
+
+    APP -->|"AgentDependencies\n(model, searchFn, getFaqsFn)"| RA
+    RA --> PROMPTS
+    RA --> TOOLS
+    TOOLS --> VS
+    TOOLS --> FQ
+
+    VS -->|"searchFn · DI"| VDB
+    FQ -->|"getFaqsFn · DI"| FAQ
+    RA -->|"streamText()"| LLM_HOST
+    LLM_HOST -->|"tool calls + results"| RA
+    RA -->|"StreamTextResult"| APP
+
+    APP -->|"getSystemPrompt()"| GSP
+    APP -->|"stripMarkdownForVoice()\nclean context injection"| SMV
+    GSP --> DG_STT
+    DG_STT --> LLM_EXT
+    LLM_EXT --> DG_TTS
+    SMV --> LLM_EXT
+
+    IDX -.->|"re-exports"| TextAgent
+    IDX -.->|"re-exports"| VoiceAgent
+```
+
 ## How It Works
 
 ### Text Agent
