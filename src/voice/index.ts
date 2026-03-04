@@ -1,31 +1,44 @@
+import type { VoiceMessage } from './types';
+
+import { marked, Renderer } from 'marked';
+
 export function stripMarkdownForVoice(text: string): string {
-  return text
-    .replace(/```[\s\S]*?```/g, ' ')
-    .replace(/`([^`]*)`/g, '$1')
-    .replace(/^#{1,6}\s*/gm, '')
-    .replace(/\*\*\*([^*]+)\*\*\*/g, '$1')
-    .replace(/\*\*([^*]+)\*\*/g, '$1')
-    .replace(/\*([^*]+)\*/g, '$1')
-    .replace(/__([^_]+)__/g, '$1')
-    .replace(/_([^_]+)_/g, '$1')
-    .replace(/~~([^~]+)~~/g, '$1')
-    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
-    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '')
-    .replace(/^\s*[-*+]\s+/gm, '')
-    .replace(/^\s*\d+\.\s+/gm, '')
-    .replace(/^\s*>\s*/gm, '')
-    .replace(/\|/g, ' ')
-    .replace(/^[-:| ]+$/gm, '')
-    .replace(/https?:\/\/[^\s)]+/g, '')
-    .replace(/[*#~`\[\]{}()<>]/g, '')
-    .replace(/\n{3,}/g, '\n\n')
-    .replace(/  +/g, ' ')
-    .trim();
+    const renderer = new Renderer();
+
+    renderer.heading = (token: any) => `${token.text}. `;
+    renderer.paragraph = (token: any) => `${token.text} `;
+    renderer.strong = (token: any) => token.text;
+    renderer.em = (token: any) => token.text;
+    renderer.codespan = (token: any) => token.text;
+    renderer.code = () => ' ';  // Drop code blocks entirely
+    renderer.link = (token: any) => token.text; // Keep link text, drop URL
+    renderer.image = () => ''; // Drop images
+    renderer.list = (token: any) => token.body || '';
+    renderer.listitem = (token: any) => `${token.text}. `;
+    renderer.blockquote = (token: any) => token.text;
+    renderer.hr = () => '. ';
+    renderer.br = () => ' ';
+    renderer.table = (token: any) => `${token.header} ${token.rows}`;
+    renderer.tablerow = (token: any) => `${token.content} `;
+    renderer.tablecell = (token: any) => `${token.text}. `;
+    renderer.del = (token: any) => token.text;
+
+    try {
+        const html = marked(text, { renderer, async: false }) as string;
+        return html
+            .replace(/<[^>]+>/g, ' ')  // Strip any residual HTML tags
+            .replace(/https?:\/\/\S+/g, '')  // Remove bare URLs
+            .replace(/\s{2,}/g, ' ')
+            .trim();
+    } catch {
+        // Fallback to simple strip on parse failure
+        return text.replace(/[#*`_~\[\]()>|]/g, '').replace(/\s{2,}/g, ' ').trim();
+    }
 }
 
 export function getSystemPrompt(institutionName?: string): string {
-  const name = institutionName || 'the university';
-  return `You are a senior advisor at ${name} on a phone call with a student. You genuinely care about helping them and love talking about the university.
+    const name = institutionName || 'the university';
+    return `You are a senior advisor at ${name} on a phone call with a student. You genuinely care about helping them and love talking about the university.
 
 PERSONALITY: Warm, enthusiastic, thorough. You enjoy explaining things in detail. You talk like someone who has worked at ${name} for years and knows everything about it.
 
@@ -42,28 +55,15 @@ HOW TO TALK:
 - Use natural transitions: "And another thing worth knowing...", "Oh and speaking of that...", "Now here is the really important part..."
 - Share your enthusiasm: "That is actually a really popular program" or "A lot of students love that one."
 
-SPEECH RULES - CRITICAL, DO NOT VIOLATE:
-- You are speaking directly to a text-to-speech engine. Every single character you output will be read aloud to the student.
-- NEVER output **, *, #, -, |, [], (), backticks, or ANY markdown characters whatsoever.
-- NEVER use bullet points. If you are about to write a dash or hyphen to start a list item, write a sentence instead.
-- NEVER use numbered lists (1. 2. 3.). Speak in connected prose paragraphs only.
-- NEVER use headers or bold text. There is no screen, only audio.
-- NEVER read URLs or links aloud.
-- Plain English sentences and paragraphs only, always.
-- Detailed written notes with sources and links appear automatically in the student's chat. You can mention this once briefly if relevant.`;
+SPEECH RULES:
+- Plain English only. Never say "star", "asterisk", "pound", "hashtag", or "bracket".
+- Never read URLs or links aloud.
+- ABSOLUTELY NO MARKDOWN. You must NOT output any markdown formatting whatsoever.
+- Do NOT use **bold**, *italics*, bullet points (-), numbered lists (1.), or any special formatting characters.
+- Structure your response as a flowing verbal conversation or phone script.
+- Detailed written notes appear automatically in the user's chat. You can mention this once briefly.`;
 }
 
 export type AgentState = 'idle' | 'connecting' | 'listening' | 'thinking' | 'speaking';
 
-export interface VoiceSource {
-  url: string;
-  title?: string;
-  content: string;
-}
-
-export interface VoiceMessage {
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp: number;
-  sources?: VoiceSource[];
-}
+export type { VoiceMessage };
